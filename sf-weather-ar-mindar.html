@@ -187,13 +187,26 @@
 </head>
 <body>
 
-  <!-- Loading Screen -->
+  <!-- Tap to Start Screen -->
   <div id="loading-screen">
     <img class="loading-magnet" src="magnet-marker.png" alt="SF Magnet" />
     <div class="loading-title">San Francisco</div>
     <div class="loading-subtitle">Live Weather · AR Experience</div>
     <div class="progress-track"><div class="progress-fill"></div></div>
-    <div class="loading-status" id="load-status">Initializing camera...</div>
+    <div class="loading-status" id="load-status">Tap below to start</div>
+    <button id="start-btn" onclick="startAR()" style="
+      margin-top: 28px;
+      padding: 16px 48px;
+      background: linear-gradient(135deg, #0077ff, #00ccff);
+      color: white;
+      border: none;
+      border-radius: 50px;
+      font-size: 18px;
+      font-family: Georgia, serif;
+      letter-spacing: 2px;
+      cursor: pointer;
+      box-shadow: 0 4px 24px rgba(0,150,255,0.4);
+    ">TAP TO START AR</button>
   </div>
 
   <!-- Scan hint -->
@@ -239,7 +252,7 @@
        tracks and anchors to the physical magnet
   ════════════════════════════════════════════════ -->
   <a-scene
-    mindar-image="imageTargetSrc: target-bay-area.mind; autoStart: true; uiLoading: no; uiError: no; uiScanning: no; filterMinCF: 0.001; filterBeta: 100; missTolerance: 10;"
+    mindar-image="imageTargetSrc: target-bay-area.mind; autoStart: false; uiLoading: no; uiError: no; uiScanning: no; filterMinCF: 0.001; filterBeta: 100; missTolerance: 10;"
     color-space="sRGB"
     renderer="colorManagement: true; physicallyCorrectLights: true; alpha: true"
     vr-mode-ui="enabled: false"
@@ -423,20 +436,31 @@
       }
     }
 
-    // ── Explicitly request camera permission first ──────────
-    async function requestCamera() {
+    // ── Start AR on button tap (triggers camera permission via user gesture) ──
+    async function startAR() {
+      const btn = document.getElementById('start-btn');
+      btn.textContent = 'Starting...';
+      btn.disabled = true;
+
       try {
-        loadStatus.textContent = 'Requesting camera access...';
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        // Permission granted — stop this stream, let MindAR take over
+        // Request camera via user gesture — guaranteed to prompt on Android
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
         stream.getTracks().forEach(t => t.stop());
-        loadStatus.textContent = 'Camera ready — scanning...';
-      } catch (err) {
-        loadStatus.textContent = 'Camera access denied — please allow camera in settings';
-        console.warn('Camera permission denied:', err);
+
+        // Now start MindAR
+        document.getElementById('load-status').textContent = 'Point camera at your magnet...';
+        const scene = document.querySelector('a-scene');
+        const mindarSystem = scene.systems['mindar-image-system'];
+        if (mindarSystem) mindarSystem.start();
+        setTimeout(() => document.getElementById('loading-screen').classList.add('fade-out'), 1500);
+
+      } catch(err) {
+        btn.textContent = 'TAP TO START AR';
+        btn.disabled = false;
+        document.getElementById('load-status').textContent = 'Camera denied — check permissions';
+        console.warn('Camera error:', err);
       }
     }
-    requestCamera();
 
     // ── Scene / Tracking Events ─────────────────────────────
     const scene       = document.querySelector('a-scene');
@@ -447,17 +471,17 @@
 
     // Dismiss loading screen once A-Frame is ready
     scene.addEventListener('loaded', () => {
-      loadStatus.textContent = 'Camera ready — scanning...';
-      setTimeout(() => loadScreen.classList.add('fade-out'), 800);
+      // Don't auto-dismiss — wait for button tap
     });
 
     // MindAR fires these on the target entity
     const target = document.querySelector('[mindar-image-target]');
 
     target.addEventListener('targetFound', () => {
+      loadScreen.classList.add('fade-out');
       weatherCard.classList.add('visible');
       scanHint.classList.add('hidden');
-      fetchWeather(); // fetch fresh on each detection
+      fetchWeather();
     });
 
     target.addEventListener('targetLost', () => {

@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>SF Bay Live Weather AR</title>
+
+  <!--
+  ╔══════════════════════════════════════════════════════════╗
+  ║          SF BAY LIVE WEATHER AR — SETUP CHECKLIST        ║
+  ╠══════════════════════════════════════════════════════════╣
+  ║                                                          ║
+  ║  1. Get a FREE OpenWeatherMap API key:                   ║
+  ║     → openweathermap.org → Sign Up → API Keys           ║
+  ║     → Paste your key where it says 53b0487a51ca8a819e91d12d433a5141     ║
+  ║                                                          ║
+  ║  2. Generate your .mind marker file:                     ║
+  ║     → Go to: hiukim.github.io/mind-ar-js-doc/tools/compile
+  ║     → Upload your magnet-marker.png                     ║
+  ║     → Click Start → Download targets.mind               ║
+  ║     → Rename it: target-bay-area.mind                            ║
+  ║                                                          ║
+  ║  3. Host these 3 files together on GitHub Pages:         ║
+  ║     → sf-weather-ar.html                                ║
+  ║     → magnet-marker.png                                 ║
+  ║     → target-bay-area.mind                                       ║
+  ║                                                          ║
+  ║  4. Program your NFC chip with the GitHub Pages URL      ║
+  ║                                                          ║
+  ║  COST: $0 forever. No license. No per-view fees.        ║
+  ╚══════════════════════════════════════════════════════════╝
+  -->
+
+  <!-- ── MindAR + A-Frame (100% free, open source) ── -->
+  <script src="https://cdn.jsdelivr.net/npm/mindar-image-aframe@latest/dist/mindar-image.prod.js"></script>
+  <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mindar-image-aframe@latest/dist/mindar-image-aframe.prod.js"></script>
+
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+
+    /* ── Loading Screen ── */
+    #loading-screen {
+      position: fixed; inset: 0; z-index: 9999;
+      background: linear-gradient(160deg, #050e1f 0%, #0a1f3d 60%, #050e1f 100%);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      transition: opacity 1s ease;
+    }
+    #loading-screen.fade-out { opacity: 0; pointer-events: none; }
+
+    .loading-magnet {
+      width: 200px; margin-bottom: 28px;
+      border-radius: 50%;
+      filter: drop-shadow(0 0 24px rgba(0, 180, 255, 0.7));
+      animation: float 3s ease-in-out infinite;
+    }
+    @keyframes float {
+      0%, 100% { transform: translateY(0px); }
+      50%       { transform: translateY(-10px); }
+    }
+    .loading-title {
+      font-family: 'Georgia', serif;
+      color: #fff; font-size: 26px;
+      letter-spacing: 6px; text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .loading-subtitle {
+      color: #4db8e8; font-family: monospace;
+      font-size: 12px; letter-spacing: 3px;
+      text-transform: uppercase; margin-bottom: 40px;
+    }
+    .progress-track {
+      width: 220px; height: 2px;
+      background: rgba(255,255,255,0.1); border-radius: 2px;
+      overflow: hidden; margin-bottom: 16px;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #0077ff, #00e5ff);
+      border-radius: 2px;
+      animation: progress 2.5s ease-in-out infinite;
+    }
+    @keyframes progress {
+      0%   { width: 0%;   margin-left: 0; }
+      50%  { width: 60%;  margin-left: 20%; }
+      100% { width: 0%;   margin-left: 100%; }
+    }
+    .loading-status {
+      color: rgba(255,255,255,0.4);
+      font-family: monospace; font-size: 11px;
+      letter-spacing: 2px;
+    }
+
+    /* ── Scan Hint Banner ── */
+    #scan-hint {
+      position: fixed; bottom: 48px;
+      left: 50%; transform: translateX(-50%);
+      z-index: 500; text-align: center;
+      transition: opacity 0.5s ease;
+    }
+    .hint-pill {
+      display: inline-block;
+      background: rgba(5, 15, 35, 0.8);
+      border: 1px solid rgba(0, 180, 255, 0.3);
+      border-radius: 50px; padding: 12px 28px;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 4px 24px rgba(0,100,200,0.2);
+    }
+    .hint-main {
+      font-family: 'Georgia', serif;
+      color: #fff; font-size: 15px;
+      margin-bottom: 4px;
+    }
+    .hint-sub {
+      font-family: monospace;
+      color: #4db8e8; font-size: 10px;
+      letter-spacing: 2px; text-transform: uppercase;
+    }
+    #scan-hint.hidden { opacity: 0; pointer-events: none; }
+
+    /* ── Weather Card ── */
+    #weather-card {
+      position: fixed; top: 0; left: 0; right: 0;
+      z-index: 500;
+      background: linear-gradient(180deg,
+        rgba(5,15,35,0.95) 0%,
+        rgba(8,22,50,0.85) 100%);
+      border-bottom: 1px solid rgba(0,180,255,0.2);
+      backdrop-filter: blur(16px);
+      padding: 16px 24px 14px;
+      display: flex; align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      transform: translateY(-100%);
+      transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    #weather-card.visible { transform: translateY(0); }
+
+    .wc-left { display: flex; flex-direction: column; }
+    .wc-location {
+      font-family: monospace;
+      font-size: 10px; letter-spacing: 3px;
+      text-transform: uppercase; color: #4db8e8;
+      margin-bottom: 2px;
+    }
+    .wc-temp {
+      font-family: 'Georgia', serif;
+      font-size: 52px; font-weight: 300;
+      color: #fff; line-height: 1;
+      margin-bottom: 2px;
+    }
+    .wc-desc {
+      font-family: monospace;
+      font-size: 11px; color: rgba(255,255,255,0.6);
+      letter-spacing: 1px; text-transform: capitalize;
+    }
+
+    .wc-icon { font-size: 44px; flex-shrink: 0; }
+
+    .wc-right {
+      display: flex; flex-direction: column;
+      gap: 6px; min-width: 90px;
+    }
+    .wc-detail {
+      display: flex; justify-content: space-between;
+      align-items: baseline; gap: 8px;
+    }
+    .wc-detail-label {
+      font-family: monospace; font-size: 9px;
+      letter-spacing: 2px; text-transform: uppercase;
+      color: #4db8e8;
+    }
+    .wc-detail-val {
+      font-family: monospace; font-size: 13px;
+      color: #fff; font-weight: bold;
+    }
+
+    /* ── AR Canvas ── */
+    a-scene {
+      position: fixed; inset: 0;
+      width: 100% !important;
+      height: 100% !important;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Loading Screen -->
+  <div id="loading-screen">
+    <img class="loading-magnet" src="magnet-marker.png" alt="SF Magnet" />
+    <div class="loading-title">San Francisco</div>
+    <div class="loading-subtitle">Live Weather · AR Experience</div>
+    <div class="progress-track"><div class="progress-fill"></div></div>
+    <div class="loading-status" id="load-status">Initializing camera...</div>
+  </div>
+
+  <!-- Scan hint -->
+  <div id="scan-hint">
+    <div class="hint-pill">
+      <div class="hint-main">Point camera at your SF magnet</div>
+      <div class="hint-sub">⬡ Image tracking active</div>
+    </div>
+  </div>
+
+  <!-- Weather card -->
+  <div id="weather-card">
+    <div class="wc-left">
+      <div class="wc-location">San Francisco, CA</div>
+      <div class="wc-temp" id="w-temp">--°</div>
+      <div class="wc-desc" id="w-desc">Loading weather...</div>
+    </div>
+    <div class="wc-icon" id="w-icon">🌫</div>
+    <div class="wc-right">
+      <div class="wc-detail">
+        <span class="wc-detail-label">Feels</span>
+        <span class="wc-detail-val" id="w-feels">--°</span>
+      </div>
+      <div class="wc-detail">
+        <span class="wc-detail-label">Humidity</span>
+        <span class="wc-detail-val" id="w-humid">--%</span>
+      </div>
+      <div class="wc-detail">
+        <span class="wc-detail-label">Wind</span>
+        <span class="wc-detail-val" id="w-wind">--</span>
+      </div>
+      <div class="wc-detail">
+        <span class="wc-detail-label">Vis</span>
+        <span class="wc-detail-val" id="w-vis">--</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════
+       A-FRAME + MindAR SCENE
+       imageTargetSrc points to your .mind file
+       Everything inside <a-entity mindar-image-target>
+       tracks and anchors to the physical magnet
+  ════════════════════════════════════════════════ -->
+  <a-scene
+    mindar-image="imageTargetSrc: target-bay-area.mind; autoStart: true; uiLoading: no; uiError: no; uiScanning: no; filterMinCF: 0.001; filterBeta: 100; missTolerance: 10;"
+    color-space="sRGB"
+    renderer="colorManagement: true; physicallyCorrectLights: true; alpha: true"
+    vr-mode-ui="enabled: false"
+    device-orientation-permission-ui="enabled: false"
+  >
+    <a-assets>
+      <img id="magnet-img" src="magnet-marker.png" crossorigin="anonymous" />
+    </a-assets>
+
+    <!-- Camera -->
+    <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+    <!-- ── Marker anchor — everything here locks to the magnet ── -->
+    <a-entity mindar-image-target="targetIndex: 0">
+
+      <!-- Subtle magnet glow plane (same shape, semi-transparent) -->
+      <a-image
+        src="#magnet-img"
+        width="1.6" height="0.72"
+        position="0 0 0.001"
+        opacity="0.15"
+        material="transparent: true; alphaTest: 0.01; shader: flat"
+      ></a-image>
+
+      <!-- Oval glow border matching magnet shape -->
+      <a-ring
+        color="#00aaff"
+        radius-inner="0.74"
+        radius-outer="0.76"
+        position="0 0 0.003"
+        rotation="0 0 0"
+        material="color: #00aaff; emissive: #00aaff; emissiveIntensity: 0.8; transparent: true; opacity: 0.5; shader: flat"
+        animation="property: material.opacity; from: 0.2; to: 0.7; dur: 1800; dir: alternate; loop: true; easing: easeInOutSine"
+      ></a-ring>
+
+      <!-- Golden Gate Bridge pin (upper right of magnet) -->
+      <a-entity position="0.38 0.14 0.05">
+        <a-cone
+          color="#ff4400"
+          radius-bottom="0.022" radius-top="0"
+          height="0.07" rotation="180 0 0"
+        ></a-cone>
+        <a-sphere
+          color="#ff4400" radius="0.022"
+          position="0 0.035 0"
+          material="emissive: #ff4400; emissiveIntensity: 0.6; shader: flat"
+          animation="property: scale; from: 1 1 1; to: 1.3 1.3 1.3; dur: 900; dir: alternate; loop: true"
+        ></a-sphere>
+      </a-entity>
+
+      <!-- Downtown SF pin -->
+      <a-entity position="0.28 0.02 0.05">
+        <a-cone
+          color="#00ccff"
+          radius-bottom="0.016" radius-top="0"
+          height="0.055" rotation="180 0 0"
+        ></a-cone>
+        <a-sphere
+          color="#00ccff" radius="0.016"
+          position="0 0.028 0"
+          material="emissive: #00ccff; emissiveIntensity: 0.7; shader: flat"
+          animation="property: scale; from: 1 1 1; to: 1.3 1.3 1.3; dur: 1100; dir: alternate; loop: true; delay: 400"
+        ></a-sphere>
+      </a-entity>
+
+      <!-- Oakland pin (right side of bay) -->
+      <a-entity position="0.55 -0.05 0.05">
+        <a-cone
+          color="#ffcc00"
+          radius-bottom="0.014" radius-top="0"
+          height="0.05" rotation="180 0 0"
+        ></a-cone>
+        <a-sphere
+          color="#ffcc00" radius="0.014"
+          position="0 0.025 0"
+          material="emissive: #ffcc00; emissiveIntensity: 0.6; shader: flat"
+          animation="property: scale; from: 1 1 1; to: 1.3 1.3 1.3; dur: 1300; dir: alternate; loop: true; delay: 700"
+        ></a-sphere>
+      </a-entity>
+
+      <!-- Compass rose spinning ring (left side of magnet) -->
+      <a-torus
+        position="-0.46 -0.06 0.02"
+        radius="0.09" radius-tubular="0.004"
+        color="#4db8e8"
+        material="emissive: #4db8e8; emissiveIntensity: 0.8; transparent: true; opacity: 0.7; shader: flat"
+        animation="property: rotation; to: 0 0 360; loop: true; dur: 10000; easing: linear"
+      ></a-torus>
+      <!-- Inner compass ring spinning opposite -->
+      <a-torus
+        position="-0.46 -0.06 0.022"
+        radius="0.065" radius-tubular="0.003"
+        color="#ffffff"
+        material="emissive: #ffffff; emissiveIntensity: 0.5; transparent: true; opacity: 0.4; shader: flat"
+        animation="property: rotation; to: 0 0 -360; loop: true; dur: 7000; easing: linear"
+      ></a-torus>
+
+      <!-- Weather condition plane — changes color with conditions -->
+      <!-- Floats above the bay water area -->
+      <a-plane
+        id="weather-overlay"
+        position="0.15 -0.05 0.015"
+        width="0.7" height="0.5"
+        color="#0044aa"
+        material="transparent: true; opacity: 0.12; shader: flat"
+        rotation="0 0 0"
+      ></a-plane>
+
+      <!-- Ambient light -->
+      <a-light type="ambient" color="#88c8ff" intensity="0.7"></a-light>
+      <a-light type="directional" position="0 1 1" intensity="0.6" color="#ffffff"></a-light>
+
+    </a-entity>
+  </a-scene>
+
+  <script>
+    // ═══════════════════════════════════════════════════════
+    //  REPLACE THIS with your free OpenWeatherMap key
+    //  Sign up free at: openweathermap.org
+    // ═══════════════════════════════════════════════════════
+    const WEATHER_KEY = '53b0487a51ca8a819e91d12d433a5141';
+
+    const SF_LAT = 37.7749;
+    const SF_LON = -122.4194;
+
+    const WEATHER_ICONS = {
+      Thunderstorm: '⛈', Drizzle: '🌦', Rain: '🌧',
+      Snow: '❄️',  Mist: '🌫',  Smoke: '🌫',
+      Haze: '🌫',  Dust: '🌫',  Fog:   '🌁',
+      Clear: '☀️', Clouds: '⛅'
+    };
+
+    // Overlay tint colors for different conditions
+    const OVERLAY_COLORS = {
+      Thunderstorm: '#330066', Drizzle: '#003366', Rain: '#002255',
+      Snow: '#aaccff',         Mist: '#334455',    Fog: '#334455',
+      Clear: '#ff8800',        Clouds: '#334477',  default: '#0044aa'
+    };
+
+    // ── Fetch live weather from OpenWeatherMap ──────────────
+    async function fetchWeather() {
+      try {
+        const url = `https://api.openweathermap.org/data/2.5/weather`
+          + `?lat=${SF_LAT}&lon=${SF_LON}`
+          + `&appid=${WEATHER_KEY}&units=imperial`;
+
+        const res  = await fetch(url);
+        const data = await res.json();
+
+        if (data.cod !== 200) throw new Error(data.message);
+
+        const main     = data.weather[0].main;
+        const desc     = data.weather[0].description;
+        const temp     = Math.round(data.main.temp);
+        const feels    = Math.round(data.main.feels_like);
+        const humidity = data.main.humidity;
+        const windMph  = Math.round(data.wind.speed);
+        const visMi    = data.visibility
+          ? (data.visibility * 0.000621371).toFixed(1) + ' mi'
+          : '--';
+
+        // Update weather card UI
+        document.getElementById('w-temp').textContent  = `${temp}°F`;
+        document.getElementById('w-desc').textContent  = desc;
+        document.getElementById('w-icon').textContent  = WEATHER_ICONS[main] || '🌤';
+        document.getElementById('w-feels').textContent = `${feels}°`;
+        document.getElementById('w-humid').textContent = `${humidity}%`;
+        document.getElementById('w-wind').textContent  = `${windMph} mph`;
+        document.getElementById('w-vis').textContent   = visMi;
+
+        // Update AR overlay color to match conditions
+        const overlay = document.getElementById('weather-overlay');
+        if (overlay) {
+          const tint = OVERLAY_COLORS[main] || OVERLAY_COLORS.default;
+          overlay.setAttribute('material', `transparent: true; opacity: 0.18; color: ${tint}; shader: flat`);
+        }
+
+      } catch (err) {
+        console.warn('Weather unavailable:', err);
+        document.getElementById('w-desc').textContent = 'Weather data unavailable';
+      }
+    }
+
+    // ── Scene / Tracking Events ─────────────────────────────
+    const scene       = document.querySelector('a-scene');
+    const loadScreen  = document.getElementById('loading-screen');
+    const scanHint    = document.getElementById('scan-hint');
+    const weatherCard = document.getElementById('weather-card');
+    const loadStatus  = document.getElementById('load-status');
+
+    // Dismiss loading screen once A-Frame is ready
+    scene.addEventListener('loaded', () => {
+      loadStatus.textContent = 'Camera ready — scanning...';
+      setTimeout(() => loadScreen.classList.add('fade-out'), 800);
+    });
+
+    // MindAR fires these on the target entity
+    const target = document.querySelector('[mindar-image-target]');
+
+    target.addEventListener('targetFound', () => {
+      weatherCard.classList.add('visible');
+      scanHint.classList.add('hidden');
+      fetchWeather(); // fetch fresh on each detection
+    });
+
+    target.addEventListener('targetLost', () => {
+      weatherCard.classList.remove('visible');
+      scanHint.classList.remove('hidden');
+    });
+
+    // Auto-refresh weather every 10 minutes while tracking
+    setInterval(() => {
+      if (weatherCard.classList.contains('visible')) {
+        fetchWeather();
+      }
+    }, 10 * 60 * 1000);
+  </script>
+
+</body>
+</html>

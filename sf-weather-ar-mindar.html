@@ -423,6 +423,21 @@
       }
     }
 
+    // ── Explicitly request camera permission first ──────────
+    async function requestCamera() {
+      try {
+        loadStatus.textContent = 'Requesting camera access...';
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        // Permission granted — stop this stream, let MindAR take over
+        stream.getTracks().forEach(t => t.stop());
+        loadStatus.textContent = 'Camera ready — scanning...';
+      } catch (err) {
+        loadStatus.textContent = 'Camera access denied — please allow camera in settings';
+        console.warn('Camera permission denied:', err);
+      }
+    }
+    requestCamera();
+
     // ── Scene / Tracking Events ─────────────────────────────
     const scene       = document.querySelector('a-scene');
     const loadScreen  = document.getElementById('loading-screen');

@@ -443,22 +443,65 @@
       btn.disabled = true;
 
       try {
-        // Request camera via user gesture — guaranteed to prompt on Android
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-        stream.getTracks().forEach(t => t.stop());
+        // Get rear camera stream directly
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { exact: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false
+        });
 
-        // Now start MindAR
-        document.getElementById('load-status').textContent = 'Point camera at your magnet...';
-        const scene = document.querySelector('a-scene');
-        const mindarSystem = scene.systems['mindar-image-system'];
-        if (mindarSystem) mindarSystem.start();
-        setTimeout(() => document.getElementById('loading-screen').classList.add('fade-out'), 1500);
+        // Inject a video element as the background so we can see camera is working
+        const video = document.createElement('video');
+        video.srcObject = stream;
+        video.autoplay = true;
+        video.playsInline = true;
+        video.muted = true;
+        video.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:1;';
+        document.body.appendChild(video);
+        await video.play();
+
+        document.getElementById('load-status').textContent = 'Camera live! Loading AR tracker...';
+
+        // Now start MindAR — it will take over the camera
+        setTimeout(() => {
+          const scene = document.querySelector('a-scene');
+          const mindarSystem = scene.systems['mindar-image-system'];
+          if (mindarSystem) {
+            mindarSystem.start();
+            // Remove our manual video once MindAR takes over
+            setTimeout(() => { try { document.body.removeChild(video); } catch(e){} }, 2000);
+          }
+          document.getElementById('loading-screen').classList.add('fade-out');
+        }, 1000);
 
       } catch(err) {
-        btn.textContent = 'TAP TO START AR';
-        btn.disabled = false;
-        document.getElementById('load-status').textContent = 'Camera denied — check permissions';
-        console.warn('Camera error:', err);
+        // Try without 'exact' constraint (some phones need this)
+        try {
+          const stream2 = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+          const video2 = document.createElement('video');
+          video2.srcObject = stream2;
+          video2.autoplay = true;
+          video2.playsInline = true;
+          video2.muted = true;
+          video2.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:1;';
+          document.body.appendChild(video2);
+          await video2.play();
+
+          setTimeout(() => {
+            const scene = document.querySelector('a-scene');
+            const mindarSystem = scene.systems['mindar-image-system'];
+            if (mindarSystem) {
+              mindarSystem.start();
+              setTimeout(() => { try { document.body.removeChild(video2); } catch(e){} }, 2000);
+            }
+            document.getElementById('loading-screen').classList.add('fade-out');
+          }, 1000);
+
+        } catch(err2) {
+          btn.textContent = 'TAP TO START AR';
+          btn.disabled = false;
+          document.getElementById('load-status').textContent = 'Camera denied — check app permissions';
+          console.warn('Camera error:', err2);
+        }
       }
     }
 

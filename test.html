@@ -2,18 +2,66 @@
 <html>
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>MindAR Test</title>
+  <title>SF Weather AR Test</title>
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
   <style>
-    body { margin: 0; }
-    #start { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
-      z-index:999; padding:20px 40px; font-size:20px; background:#0077ff;
-      color:white; border:none; border-radius:50px; cursor:pointer; }
+    body { margin: 0; background: #000; font-family: Georgia, serif; }
+    #start {
+      position: fixed; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 999; padding: 20px 40px; font-size: 20px;
+      background: #0077ff; color: white; border: none;
+      border-radius: 50px; cursor: pointer;
+    }
+    #weather-card {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 500;
+      background: rgba(5,15,35,0.92);
+      border-bottom: 1px solid rgba(0,180,255,0.25);
+      backdrop-filter: blur(16px);
+      padding: 14px 20px;
+      display: flex; align-items: center; justify-content: space-between;
+      transform: translateY(-100%);
+      transition: transform 0.5s ease;
+      color: white;
+    }
+    #weather-card.visible { transform: translateY(0); }
+    .wc-temp { font-size: 44px; font-weight: 300; line-height: 1; }
+    .wc-location { font-size: 10px; letter-spacing: 3px; text-transform: uppercase; color: #4db8e8; margin-bottom: 2px; }
+    .wc-desc { font-size: 11px; color: rgba(255,255,255,0.6); text-transform: capitalize; }
+    .wc-icon { font-size: 40px; }
+    .wc-details { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+    .wc-row { display: flex; justify-content: space-between; gap: 12px; }
+    .wc-label { color: #4db8e8; font-size: 9px; letter-spacing: 2px; text-transform: uppercase; }
+    #hint {
+      position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.7); border: 1px solid rgba(0,180,255,0.3);
+      border-radius: 50px; padding: 10px 24px; color: white;
+      font-size: 13px; text-align: center; z-index: 500;
+      transition: opacity 0.4s;
+    }
+    #hint.hidden { opacity: 0; }
   </style>
 </head>
 <body>
-  <button id="start" onclick="go()">TAP TO TEST AR</button>
+  <button id="start" onclick="go()">TAP TO START AR</button>
+
+  <div id="weather-card">
+    <div>
+      <div class="wc-location">San Francisco, CA</div>
+      <div class="wc-temp" id="w-temp">--°</div>
+      <div class="wc-desc" id="w-desc">Loading...</div>
+    </div>
+    <div class="wc-icon" id="w-icon">🌫</div>
+    <div class="wc-details">
+      <div class="wc-row"><span class="wc-label">Feels</span><span id="w-feels">--°</span></div>
+      <div class="wc-row"><span class="wc-label">Humidity</span><span id="w-humid">--%</span></div>
+      <div class="wc-row"><span class="wc-label">Wind</span><span id="w-wind">-- mph</span></div>
+      <div class="wc-row"><span class="wc-label">Visibility</span><span id="w-vis">-- mi</span></div>
+    </div>
+  </div>
+
+  <div id="hint">Point camera at the card image</div>
 
   <a-scene
     mindar-image="imageTargetSrc: https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind; autoStart: false;"
@@ -27,29 +75,71 @@
     </a-assets>
     <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
     <a-entity mindar-image-target="targetIndex: 0">
-      <a-plane src="#card" position="0 0 0" height="0.552" width="1" rotation="0 0 0"></a-plane>
+      <a-plane src="#card" position="0 0 0" height="0.552" width="1" opacity="0.4" material="transparent:true"></a-plane>
+      <a-ring color="#00ccff" radius-inner="0.55" radius-outer="0.57" position="0 0 0.001"
+        material="emissive:#00ccff; emissiveIntensity:0.8; transparent:true; opacity:0.7; shader:flat"
+        animation="property:material.opacity; from:0.3; to:0.8; dur:1500; dir:alternate; loop:true">
+      </a-ring>
+      <a-plane id="weather-overlay" position="0 0 0.002" width="1" height="0.552"
+        material="color:#0044aa; transparent:true; opacity:0.15; shader:flat">
+      </a-plane>
+      <a-entity position="0.1 0.1 0.05">
+        <a-cone color="#00ccff" radius-bottom="0.02" radius-top="0" height="0.06" rotation="180 0 0"></a-cone>
+        <a-sphere color="#00ccff" radius="0.02" position="0 0.03 0"
+          material="emissive:#00ccff; emissiveIntensity:0.7; shader:flat"
+          animation="property:scale; from:1 1 1; to:1.4 1.4 1.4; dur:900; dir:alternate; loop:true">
+        </a-sphere>
+      </a-entity>
+      <a-light type="ambient" intensity="0.7"></a-light>
     </a-entity>
   </a-scene>
 
   <script>
+    const WEATHER_KEY = '53b0487a51ca8a819e91d12d433a5141';
+    const ICONS = { Thunderstorm:'⛈',Drizzle:'🌦',Rain:'🌧',Snow:'❄️',Mist:'🌫',Fog:'🌁',Haze:'🌫',Clear:'☀️',Clouds:'⛅' };
+    const COLORS = { Thunderstorm:'#330066',Rain:'#002255',Snow:'#aaccff',Fog:'#334455',Mist:'#334455',Clear:'#ff8800',Clouds:'#334477' };
+
+    async function fetchWeather() {
+      try {
+        const r = await fetch(`https://api.openweathermap.org/data/2.5/weather?lat=37.7749&lon=-122.4194&appid=${WEATHER_KEY}&units=imperial`);
+        const d = await r.json();
+        const main = d.weather[0].main;
+        document.getElementById('w-temp').textContent  = Math.round(d.main.temp) + '°F';
+        document.getElementById('w-desc').textContent  = d.weather[0].description;
+        document.getElementById('w-icon').textContent  = ICONS[main] || '🌤';
+        document.getElementById('w-feels').textContent = Math.round(d.main.feels_like) + '°';
+        document.getElementById('w-humid').textContent = d.main.humidity + '%';
+        document.getElementById('w-wind').textContent  = Math.round(d.wind.speed) + ' mph';
+        document.getElementById('w-vis').textContent   = d.visibility ? (d.visibility*0.000621).toFixed(1)+' mi' : '--';
+        const overlay = document.getElementById('weather-overlay');
+        if (overlay) overlay.setAttribute('material', `color:${COLORS[main]||'#0044aa'}; transparent:true; opacity:0.18; shader:flat`);
+      } catch(e) { console.warn('Weather error:',e); }
+    }
+
     async function go() {
       document.getElementById('start').textContent = 'Starting...';
       try {
-        const s = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+        const s = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false});
         s.getTracks().forEach(t=>t.stop());
         const scene = document.querySelector('a-scene');
-        scene.addEventListener('loaded', () => {
+        const startMindAR = () => {
           scene.systems['mindar-image-system'].start();
           document.getElementById('start').style.display = 'none';
-        });
-        if (scene.hasLoaded) {
-          scene.systems['mindar-image-system'].start();
-          document.getElementById('start').style.display = 'none';
-        }
-      } catch(e) {
-        document.getElementById('start').textContent = 'Camera denied!';
-      }
+          fetchWeather();
+        };
+        scene.hasLoaded ? startMindAR() : scene.addEventListener('loaded', startMindAR);
+      } catch(e) { document.getElementById('start').textContent = 'Camera denied!'; }
     }
+
+    const target = document.querySelector('[mindar-image-target]');
+    target.addEventListener('targetFound', () => {
+      document.getElementById('weather-card').classList.add('visible');
+      document.getElementById('hint').classList.add('hidden');
+    });
+    target.addEventListener('targetLost', () => {
+      document.getElementById('weather-card').classList.remove('visible');
+      document.getElementById('hint').classList.remove('hidden');
+    });
   </script>
 </body>
 </html>

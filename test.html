@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MindAR Test</title>
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+  <style>
+    body { margin: 0; }
+    #start { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+      z-index:999; padding:20px 40px; font-size:20px; background:#0077ff;
+      color:white; border:none; border-radius:50px; cursor:pointer; }
+  </style>
+</head>
+<body>
+  <button id="start" onclick="go()">TAP TO TEST AR</button>
+
+  <a-scene
+    mindar-image="imageTargetSrc: https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind; autoStart: false;"
+    color-space="sRGB"
+    renderer="colorManagement: true, physicallyCorrectLights"
+    vr-mode-ui="enabled: false"
+    device-orientation-permission-ui="enabled: false"
+  >
+    <a-assets>
+      <img id="card" src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.png" />
+    </a-assets>
+    <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+    <a-entity mindar-image-target="targetIndex: 0">
+      <a-plane src="#card" position="0 0 0" height="0.552" width="1" rotation="0 0 0"></a-plane>
+    </a-entity>
+  </a-scene>
+
+  <script>
+    async function go() {
+      document.getElementById('start').textContent = 'Starting...';
+      try {
+        const s = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+        s.getTracks().forEach(t=>t.stop());
+        const scene = document.querySelector('a-scene');
+        scene.addEventListener('loaded', () => {
+          scene.systems['mindar-image-system'].start();
+          document.getElementById('start').style.display = 'none';
+        });
+        if (scene.hasLoaded) {
+          scene.systems['mindar-image-system'].start();
+          document.getElementById('start').style.display = 'none';
+        }
+      } catch(e) {
+        document.getElementById('start').textContent = 'Camera denied!';
+      }
+    }
+  </script>
+</body>
+</html>
